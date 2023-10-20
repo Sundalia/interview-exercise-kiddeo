@@ -52,6 +52,7 @@ class MapsCRUD:
             marker.product = Product.objects.get(pk=int(product_id))
             marker.save()
 
+
             return {'success': True}
         except ObjectDoesNotExist:
             return {

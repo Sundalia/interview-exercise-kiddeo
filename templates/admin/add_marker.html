@@ -7,12 +7,191 @@
 
 {% block content %}
   <div class="add-marker">
-    <h1>Add Map Marker</h1>
-    <form method="post" action="">
+    <h1 hidden>Add Map Marker</h1>
+    <form formaction="save">
       {% csrf_token %}
       {{ form.as_p }}
-
-      <input type="submit" value="Save" class="default" name="_save">
+      <div>
+        <label for="address">
+          Address
+        </label>
+          <input id="address">
+          <option></option>
+        </br>
+      </div> 
+      <hr></hr>
+      <div>
+        <label>
+          Product Name
+        </label for="select">
+          <select id="select">
+              <option selected disabled>Выберите продукт</option>
+          </select>
+        </br>
+      </div>
+      <hr></hr>
+      <div hidden>
+        <label>
+          id
+          <input id="id">
+        </label>
+      </div> 
+      <div>
+        <button id="save" class="save" name="save">Save</button>
+      </div>
     </form>
+    <div class="mapWrap">
+      <div id="map" class="map"></div>
+    </div>
   </div>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script>
+
+    let map
+    let coordinates_str
+
+    //including google maps api
+    (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+        key: "AIzaSyBIXxvDzTdh4c0Oqr4I3DdPlYUqQe9TUso",
+        v: "weekly",
+    });
+
+    //initializing map
+    async function initMap() {
+      const { Map } = await google.maps.importLibrary("maps")
+
+      map = new Map(document.getElementById("map"), {
+            center: { lat: 40.7175, lng: -74.0381 },
+            zoom: 2,
+            disableDefaultUI: true,
+        })
+    }
+
+    initMap()
+
+
+    //address converts to coordinates
+    select.addEventListener('click', async() => {
+      const { Geocoder } = await google.maps.importLibrary("geocoding")
+      const { Marker } = await google.maps.importLibrary("marker")
+      const geocoder = new Geocoder()
+
+      let address = document.getElementById('address')
+      let addressVal = address.value
+      
+      //geocoder returns coordinates for mapMarker to saving in db
+      geocoder.geocode({'address': addressVal}, (result, status) => {
+        if(status == 'OK') {
+            map.setCenter(result[0].geometry.location)
+            map.setZoom(20)
+            markerOptions = {
+              map:map,
+              position:result[0].geometry.location
+            }
+            marker = new Marker(markerOptions)
+            marker.setMap(map)
+            let coordinates_str = result[0].geometry.location.toString().replace(/[^0-9\,\.\-]/g, "").split(',')
+            console.log(coordinates_str)
+            return coordinates_str
+        } else {
+            if(addressVal == '') {
+              alert('Сначала нужно ввести адрес')
+            }else {alert('Не нашлось такого адреса: ' + addressVal)}
+        }
+      })
+    })
+
+
+    //geting product_choices
+    $.ajax({
+      url: '/api/v1/products/get-for-select',
+      type: 'POST',
+      data: {
+        csrfmiddlewaretoken: '{{csrf_token}}'
+      },
+      dataType: 'json',
+      success: (response) => {
+        return response
+      },
+      error: (error) => {
+        console.log(error)
+      }
+    }).then((data) =>{
+        const products = data.products_choices
+        let id_to_back
+
+        //inserting Products list to a "product name" select
+        const docFrag = document.createDocumentFragment()
+
+        for(el of products) {
+          var option = document.createElement('option')
+          option.innerHTML = el.name
+          docFrag.appendChild(option)
+        }
+
+        document.getElementById('select').appendChild(docFrag)
+
+
+        //geting product id by "name" value
+        select.addEventListener("click", () => {
+          id_to_back = products.find(x => x.name === select.value).id
+          return id_to_back
+        })
+
+        //sending formdata to post in db
+        save.addEventListener('click', () => {
+          $.ajax({
+            url: '/api/v1/maps/add-marker',
+            type: 'POST',
+            data: {
+              coordinates: coordinates_str,
+              product_id: id_to_back,
+              csrfmiddlewaretoken: '{{csrf_token}}'
+            },
+            dataType: 'json',
+            success: (response) => {
+              console.log(response)
+              alert('Сохранено')
+            },
+            error: (error) => {
+              console.log(error)
+            }
+          })
+          
+        })
+      })
+  </script>
+  <style>
+
+    div {
+      margin: 10px;
+    }
+
+    label{
+      margin: 10px;
+
+    }
+
+    .save {
+      width: 70px;
+      height: 30px;
+      background-color: rgb(64,118,144);
+      border-radius: 5px;
+      color: white;
+    }
+
+    .mapWrap {
+      margin-top: 30px;
+      height: 400px;
+      width: 100%;
+      padding: 0;
+    }
+
+    .map {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+    }
+
+  </style>
 {% endblock %}

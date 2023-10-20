@@ -3,7 +3,7 @@ from django.urls import path
 from maps.views import AdminMapsView
 
 pages_urls = [
-
+    
 ]
 
 api_urls = [

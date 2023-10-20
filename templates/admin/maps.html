@@ -1,12 +1,225 @@
 {% extends "admin/base.html" %}
 
+
 {% block content %}
 <div id="map-markers" data-place-marks="{{ place_marks }}"></div>
+<div class="wrap">
+    <div id="searchCol" class="searchCol" hidden>
+        <input type='text' class="search" id="search" placeholder="Поиск маркеров" autocomplete='off' oninput="search()">
+        <menu id="markerList"></menu>
+    </div>
+    <img id="loader" class="loader" src="/media/product_images/Spinner-1s-200px.svg"/>
+    <div class="map" id="map"></div>
+</div>
+<div id="info" class="info"></div>
 
-<script>
+<script defer>
+    //Google maps API include
+    (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({
+        key: "AIzaSyBIXxvDzTdh4c0Oqr4I3DdPlYUqQe9TUso",
+        v: "weekly",
+    })
+
+    //returns mapMarkers list
     let mapMarkers = JSON.parse(document.getElementById("map-markers").getAttribute("data-place-marks"));
-    document.querySelector("#content > h1").style.display = "none";
+    document.querySelector("#content > h1").style.display = "none"
     console.log(mapMarkers)
+
+    //preloader stuff, doesn't matter, but do not remove, please
+    window.onload = () => {
+        document.getElementById('loader').remove()
+        document.getElementById('searchCol').hidden = false
+    }
+
+    let map
+    let markers = []
+
+    //GoogleMap intialization
+    async function initMap() {
+
+        //include google libraries
+        const { Map, InfoWindow, Size } = await google.maps.importLibrary("maps")
+        const { Marker } = await google.maps.importLibrary("marker")
+
+        //initializing map
+        map = new Map(document.getElementById("map"), {
+            center: { lat: 40.7175, lng: -74.0381 },
+            zoom: 2,
+        })
+
+        // initializing markers with infowindows
+        for(i in mapMarkers){
+
+            const name = mapMarkers[i].product_name
+            const image = mapMarkers[i].product_image
+            const address = mapMarkers[i].product_address
+
+            const coord = mapMarkers[i].coordinates.replaceAll(/[^0-9\,\.\-]/g,'').split(',')
+            const position = {lat:Number(coord[0]), lng:Number(coord[1])}
+            
+            if(mapMarkers[i].coordinates.length <= 5) {
+                console.log(`${name} - ошибка в координатах`)
+            } else {
+
+                markerOptions = {
+                    map:map,
+                    position: position,
+                    title: name,
+                    optimized: false
+                }
+
+                const marker = new Marker(markerOptions)
+
+                marker.setMap(map)
+
+                let infoWindow = new InfoWindow({
+                    content: String([
+                                        `<h1 style="color: black;">${name}</h1>` +
+                                        `<div><img src="${image}" style="width: 200px;height: 100px"></div>` +
+                                        `<p style="color: black;">${address}</p>`
+                
+                    ]),
+                    minWidth: 200,
+                    anchor: marker
+                })
+
+                infoWindow.close()
+
+                marker.addListener('click', () => {
+                    infoWindow.close()
+                    infoWindow.setContent(infoWindow.content)
+                    infoWindow.open(map, marker)
+                    console.log(marker)
+                    document.getElementById('info').innerHTML = infoWindow.content
+                })
+
+
+
+                markers.push(marker)
+            }
+
+        }
+    }
+
+    initMap()
+
+
+    //shows marker on map when press to product name in list
+    function showMarker(listBtn){
+       markers.forEach(el => {
+        if(el.title == listBtn.value) {
+            map.setCenter(el.position)
+            map.setZoom(8)
+        }
+       })
+    }
+
+
+    //hides marker until page reload
+    function removeMarker(listBtn){
+        markers.forEach(el => {
+            if(el.title == listBtn.value) {
+                el.setMap(null)
+                // if(!el.setMap(map)) { //хм.. 
+                //     el.setMap(map)
+                // }
+            }
+        })
+    }
+
+
+    //inserting mapMarkersList to html list
+    const docFrag = document.createDocumentFragment()
+
+    for(el of mapMarkers) {
+        let btn  = document.createElement('input')        
+        btn.className = 'listBtn'
+        btn.setAttribute('ondblclick', `removeMarker(this)`)
+        btn.setAttribute('onclick', 'showMarker(this)')
+        btn.setAttribute('value', el.product_name)
+        btn.setAttribute('type', 'button')
+        btn.setAttribute('style', 'background-color: transparent')
+        docFrag.appendChild(btn)
+    }
+
+    let markerList = document.getElementById('markerList')
+    markerList.appendChild(docFrag)
+
+
+    //search on html mapMarkersList
+    let search = () => {
+        let searchInput = document.getElementById('search')
+        let filter = searchInput.value.toLowerCase()
+        let searchPlace = document.querySelectorAll('.listBtn')
+
+        searchPlace.forEach((el) => {
+            let text = el.value
+            if(text.toLowerCase().includes(filter) || text.toLowerCase().replace(' ', '').includes(filter)) {
+                el.style.display = ''
+            } else {
+                el.style.display = 'none'
+            }
+        })
+
+    }
+
 </script>
 <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<style>
+
+    .wrap {
+        height: 70vh;
+        width: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+
+    }
+
+    .wrap :first-child {
+        align-self: flex-start;
+    }
+
+    .wrap > img {
+        position: fixed;
+        z-index: 1;
+    }
+
+    .map {
+        height: 100%;
+        width: 100%;
+        position: fixed;
+    }
+
+    .searchCol {
+        width: 200px;
+    }
+
+    menu {
+        margin: 0;
+        padding: 0;
+        overflow: auto;
+        max-height: 100%;
+    }
+
+    .search {
+        margin-bottom: 20px;
+        width: 120px;
+    }
+
+    .listBtn {
+        background-color: transparent;
+        border: none;
+        color: white;
+        width: 100%;
+    }
+
+    .info {
+        background-color: white !important;
+        position: fixed;
+        top: 80vh!important;
+        left: 80vw!important;
+    }
+
+</style>
 {% endblock %}
