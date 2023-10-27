@@ -5,13 +5,21 @@
 <div id="map-markers" data-place-marks="{{ place_marks }}"></div>
 <div class="wrap">
     <div id="searchCol" class="searchCol" hidden>
-        <input type='text' class="search" id="search" placeholder="Поиск маркеров" autocomplete='off' oninput="search()">
-        <menu id="markerList"></menu>
+        <input type='text' class="search" id="search" placeholder="Поиск маркеров по названию продукта" autocomplete='off' oninput="search()">
+        <table id="markerList" style="width: 90%;"></table>
     </div>
     <img id="loader" class="loader" src="/media/product_images/Spinner-1s-200px.svg"/>
     <div class="map" id="map"></div>
+    <input
+        id="pac-input"
+        class="controls"
+        type="text"
+        placeholder="Поиск мест н карте"
+        hidden
+    />
+    <div id="info" class="info" hidden></div>
+    <input id="addMarkerBtn" type="button" value="Добавить маркер" class="addMarkerBtn" onclick="addMarker()" hidden>
 </div>
-<div id="info" class="info"></div>
 
 <script defer>
     //Google maps API include
@@ -29,10 +37,16 @@
     window.onload = () => {
         document.getElementById('loader').remove()
         document.getElementById('searchCol').hidden = false
+        document.getElementById('pac-input').hidden = false
+        document.querySelector('#addMarkerBtn').hidden = false
+        
+
     }
 
     let map
     let markers = []
+    const infoModalWindow = document.querySelector('#info')
+    const input = document.getElementById("pac-input")
 
     //GoogleMap intialization
     async function initMap() {
@@ -40,12 +54,22 @@
         //include google libraries
         const { Map, InfoWindow, Size } = await google.maps.importLibrary("maps")
         const { Marker } = await google.maps.importLibrary("marker")
+        const {  PlacesService, SearchBox } = await google.maps.importLibrary("places")
 
         //initializing map
         map = new Map(document.getElementById("map"), {
             center: { lat: 40.7175, lng: -74.0381 },
             zoom: 2,
+            disableDefaultUI: true
         })
+
+        //searchBox
+        
+        const searchBox = new SearchBox(input);
+
+        map.controls[google.maps.ControlPosition.TOP_LEFT].push(input)
+
+
 
         // initializing markers with infowindows
         for(i in mapMarkers){
@@ -72,30 +96,22 @@
 
                 marker.setMap(map)
 
-                let infoWindow = new InfoWindow({
-                    content: String([
-                                        `<h1 style="color: black;">${name}</h1>` +
-                                        `<div><img src="${image}" style="width: 200px;height: 100px"></div>` +
-                                        `<p style="color: black;">${address}</p>`
-                
-                    ]),
-                    minWidth: 200,
-                    anchor: marker
-                })
-
-                infoWindow.close()
+                let content = String([
+                                        `<h2 style="color: black;">${name}</h2>` +
+                                        `<img src="${image}" style="width: 180px;height: 100px">` +
+                                        `<p style="color: black;">${address}</p>`+
+                                        `<button onclick="closeWindow()"><img src="/media/product_images/close_icon.svg"/></button>` 
+                    ])
 
                 marker.addListener('click', () => {
-                    infoWindow.close()
-                    infoWindow.setContent(infoWindow.content)
-                    infoWindow.open(map, marker)
-                    console.log(marker)
-                    document.getElementById('info').innerHTML = infoWindow.content
+                        infoModalWindow.innerHTML = content
+                        infoModalWindow.hidden = false
                 })
 
 
 
                 markers.push(marker)
+
             }
 
         }
@@ -103,13 +119,44 @@
 
     initMap()
 
+    input.addEventListener('keypress' || 'click', async(e) => {
+        if (e.key === 'Enter') {
+            const { Geocoder } = await google.maps.importLibrary("geocoding")
+            const { Marker } = await google.maps.importLibrary("marker")
+            const geocoder = new Geocoder()
+
+            let inputVal = input.value
+            
+            //geocoder returns coordinates for mapMarker to saving in db
+            geocoder.geocode({'address': inputVal}, (result, status) => {
+                if(status == 'OK') {
+                    map.setCenter(result[0].geometry.location)
+                    map.setZoom(20)
+                    markerOptions = {
+                    map:map,
+                    position:result[0].geometry.location
+                    }
+                    marker = new Marker(markerOptions)
+                    marker.setMap(map)
+                    let coordinates_str = result[0].geometry.location.toString().replace(/[^0-9\,\.\-]/g, "").split(',')
+                    console.log(coordinates_str)
+                    return coordinates_str
+                } else {
+                    if(addressVal == '') {
+                    alert('Сначала нужно ввести адрес')
+                    }else {alert('Не нашлось такого адреса: ' + addressVal)}
+                }
+            })
+        }
+    })
+
 
     //shows marker on map when press to product name in list
     function showMarker(listBtn){
        markers.forEach(el => {
         if(el.title == listBtn.value) {
             map.setCenter(el.position)
-            map.setZoom(8)
+            map.setZoom(12)
         }
        })
     }
@@ -129,24 +176,40 @@
 
 
     //inserting mapMarkersList to html list
-    const docFrag = document.createDocumentFragment()
+    let docFrag = document.createDocumentFragment()
 
     for(el of mapMarkers) {
-        let btn  = document.createElement('input')        
+        
+        const checkBox = document.createElement('input')
+        checkBox.className = 'checkBox'
+        checkBox.setAttribute('type', 'checkbox')
+
+        // const markerCheckBox = document.createElement('td')
+        // markerCheckBox.appendChild(checkBox)
+
+        const btn = document.createElement('input')
         btn.className = 'listBtn'
         btn.setAttribute('ondblclick', `removeMarker(this)`)
         btn.setAttribute('onclick', 'showMarker(this)')
         btn.setAttribute('value', el.product_name)
         btn.setAttribute('type', 'button')
-        btn.setAttribute('style', 'background-color: transparent')
-        docFrag.appendChild(btn)
+
+        // const markerItemName = document.createElement('th')
+        // markerItemName.appendChild(btn)
+
+        const markerListItem = document.createElement('tr')
+        markerListItem.className = 'markerListItem'
+        markerListItem.appendChild(checkBox)
+        markerListItem.appendChild(btn)
+
+        docFrag.appendChild(markerListItem)
     }
 
-    let markerList = document.getElementById('markerList')
+    let markerList = document.querySelector('#markerList')
     markerList.appendChild(docFrag)
 
 
-    //search on html mapMarkersList
+    // search on html mapMarkersList
     let search = () => {
         let searchInput = document.getElementById('search')
         let filter = searchInput.value.toLowerCase()
@@ -155,12 +218,31 @@
         searchPlace.forEach((el) => {
             let text = el.value
             if(text.toLowerCase().includes(filter) || text.toLowerCase().replace(' ', '').includes(filter)) {
-                el.style.display = ''
+                el.parentNode.parentElement.style.display = ''
             } else {
-                el.style.display = 'none'
+                el.parentNode.parentElement.style.display = 'none'
             }
         })
 
+    }
+
+    let addMarker = () => {
+        window.location.href = 'http://127.0.0.1:8000/admin/maps/mapmarker/add'
+    }
+
+    let markersRows = document.querySelectorAll('.markerListItem')
+    markersRows.forEach((e)=>{
+                e.children[0].addEventListener('click', () => {
+                    if(e.children[0].checked == true) {
+                        console.log(e.children[1]) //эо мне нужно для множественного удаления, дописать круд на удаление
+                    }
+                })
+    })
+
+    function closeWindow() {
+        infoModalWindow.hidden = true
+        console.log(infoModalWindow)
+        console.log('sss')
     }
 
 </script>
@@ -173,6 +255,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
+        position:relative;
 
     }
 
@@ -191,34 +274,70 @@
         position: fixed;
     }
 
-    .searchCol {
-        width: 200px;
-    }
-
-    menu {
+    .searchCol{
+        width: 300px;
         margin: 0;
         padding: 0;
-        overflow: auto;
-        max-height: 100%;
+        height: 100%;
     }
+
+    .markerList {
+        margin: 0;
+        padding: 0;
+        overflow: scroll;
+        height: 100%;
+        width: 300px;
+    }
+
 
     .search {
         margin-bottom: 20px;
-        width: 120px;
+        width: 85%;
     }
 
     .listBtn {
-        background-color: transparent;
-        border: none;
-        color: white;
-        width: 100%;
+        height: 20px;
+        padding: 0 !important;
+        margin: 5px !important;
+        background-color: transparent !important;
     }
 
     .info {
         background-color: white !important;
-        position: fixed;
-        top: 80vh!important;
-        left: 80vw!important;
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        border-radius: 10px;
+        text-align: center;
+    }
+
+    .info > h2{
+        align-self: center;
+        justify-self: start;
+    }
+
+    .info > button {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+    }
+
+    .controls {
+        top: 10px !important;
+        left: 10px !important;
+        width: 60%;
+        height: 30px !important;
+        max-width: 400px;
+    }
+
+    .addMarkerBtn {
+        position: absolute;
+        background-color: rgb(64,118,144);
+        border-radius: 5px;
+        color: white;
+        top: 10px;
+        right: 10px;
+        height: 40px;
     }
 
 </style>
